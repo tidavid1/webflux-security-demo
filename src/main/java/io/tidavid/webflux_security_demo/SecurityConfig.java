@@ -7,6 +7,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatusCode;
+import org.springframework.http.server.reactive.ServerHttpResponse;
 import org.springframework.security.config.annotation.web.reactive.EnableWebFluxSecurity;
 import org.springframework.security.config.web.server.SecurityWebFiltersOrder;
 import org.springframework.security.config.web.server.ServerHttpSecurity;
@@ -36,8 +38,33 @@ public class SecurityConfig {
             .securityContextRepository(NoOpServerSecurityContextRepository.getInstance())
             .authorizeExchange(exchanges -> exchanges
                 .pathMatchers(HttpMethod.OPTIONS).permitAll()
-                .anyExchange().permitAll()
+                .anyExchange().authenticated()
             )
+            .exceptionHandling(exceptionHandlingSpec -> {
+                exceptionHandlingSpec.authenticationEntryPoint((exchange, e) -> {
+                    log.error("Authentication Error", e);
+                    ServerHttpResponse response = exchange.getResponse();
+                    response.setStatusCode(HttpStatusCode.valueOf(401));
+                    /*
+                     * RFC-6750 참조
+                     * https://datatracker.ietf.org/doc/html/rfc6750
+                     * `WWW-Authenticate` 헤더에 스키마를 통해 인증 응답 반환
+                     * realm: 인증을 요구하는 리소스의 범위를 나타냄 (ex. 도메인)
+                     * error: 인증 오류의 종류를 나타냄 (ex. invalid_token, insufficient_scope)
+                     * error_description: 인증 오류에 대한 상세 설명
+                     * error_uri: 인증 오류에 대한 상세 설명을 제공하는 URI
+                     */
+                    response.getHeaders()
+                        .set("WWW-Authenticate", "Basic realm=\"Webflux Security Demo\"");
+
+                    return response.setComplete();
+                });
+                exceptionHandlingSpec.accessDeniedHandler((exchange, e) -> {
+                    log.error("Access Denied", e);
+                    exchange.getResponse().setStatusCode(HttpStatusCode.valueOf(403));
+                    return exchange.getResponse().setComplete();
+                });
+            })
             .addFilterAt(customWebFilter1(), SecurityWebFiltersOrder.LAST)
             .addFilterAt(customWebFilter2(), SecurityWebFiltersOrder.LAST)
             .build();
