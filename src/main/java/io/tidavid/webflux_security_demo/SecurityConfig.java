@@ -7,8 +7,10 @@ import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.server.reactive.ServerHttpResponse;
+import org.springframework.lang.NonNull;
 import org.springframework.security.config.annotation.web.reactive.EnableWebFluxSecurity;
 import org.springframework.security.config.web.server.SecurityWebFiltersOrder;
 import org.springframework.security.config.web.server.ServerHttpSecurity;
@@ -19,7 +21,9 @@ import org.springframework.security.web.server.SecurityWebFilterChain;
 import org.springframework.security.web.server.context.NoOpServerSecurityContextRepository;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.reactive.CorsWebFilter;
+import org.springframework.web.server.ServerWebExchange;
 import org.springframework.web.server.WebFilter;
+import org.springframework.web.server.WebFilterChain;
 import reactor.core.publisher.Mono;
 
 @Configuration
@@ -38,7 +42,7 @@ public class SecurityConfig {
             .securityContextRepository(NoOpServerSecurityContextRepository.getInstance())
             .authorizeExchange(exchanges -> exchanges
                 .pathMatchers(HttpMethod.OPTIONS).permitAll()
-                .anyExchange().authenticated()
+                .anyExchange().permitAll()
             )
             .exceptionHandling(exceptionHandlingSpec -> {
                 exceptionHandlingSpec.authenticationEntryPoint((exchange, e) -> {
@@ -67,6 +71,7 @@ public class SecurityConfig {
             })
             .addFilterAt(customWebFilter1(), SecurityWebFiltersOrder.LAST)
             .addFilterAt(customWebFilter2(), SecurityWebFiltersOrder.LAST)
+            .addFilterAt(customWebFilter3(), SecurityWebFiltersOrder.LAST)
             .build();
     }
 
@@ -157,6 +162,32 @@ public class SecurityConfig {
                     log.info("WebFilter 2 End");
                     return chain.filter(exchange);
                 }));
+        };
+    }
+
+    /*
+     * WebFilter 3에서 예외를 발생시키고, 예외가 발생하면 에러 로그를 출력하고, BAD_REQUEST 상태 코드를 반환한다.
+     * 예외가 발생하면 SecurityWebFilterChain의 다음 필터를 실행하지 않고, 예외 처리를 한다.
+     */
+    WebFilter customWebFilter3() {
+        return new WebFilter() {
+            @NonNull
+            @Override
+            public Mono<Void> filter(@NonNull ServerWebExchange exchange,
+                @NonNull WebFilterChain chain) {
+                return something()
+                    .then(Mono.defer(() -> chain.filter(exchange)))
+                    .onErrorResume(IllegalArgumentException.class, e -> {
+                        log.error("error test");
+                        ServerHttpResponse response = exchange.getResponse();
+                        response.setStatusCode(HttpStatus.BAD_REQUEST);
+                        return response.setComplete();
+                    });
+            }
+
+            private Mono<Void> something() {
+                return Mono.error(new IllegalArgumentException("Not implemented"));
+            }
         };
     }
 
