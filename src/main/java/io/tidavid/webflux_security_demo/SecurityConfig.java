@@ -71,7 +71,7 @@ public class SecurityConfig {
             })
             .addFilterAt(customWebFilter1(), SecurityWebFiltersOrder.LAST)
             .addFilterAt(customWebFilter2(), SecurityWebFiltersOrder.LAST)
-            .addFilterAt(customWebFilter3(), SecurityWebFiltersOrder.LAST)
+            .addFilterAt(customWebFilter4(), SecurityWebFiltersOrder.LAST)
             .build();
     }
 
@@ -183,6 +183,22 @@ public class SecurityConfig {
                         response.setStatusCode(HttpStatus.BAD_REQUEST);
                         return response.setComplete();
                     });
+            }
+
+            private Mono<Void> something() {
+                return Mono.error(new IllegalArgumentException("Not implemented"));
+            }
+        };
+    }
+
+    WebFilter customWebFilter4() {
+        return new WebFilter() {
+            @NonNull
+            @Override
+            public Mono<Void> filter(@NonNull ServerWebExchange exchange,
+                @NonNull WebFilterChain chain) {
+                return something()
+                    .then(Mono.defer(() -> chain.filter(exchange)));
             }
 
             private Mono<Void> something() {
